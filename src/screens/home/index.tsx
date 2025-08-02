@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { SWATCHES } from "./../../../constant";
+import { ColorSwatch, Group } from "@mantine/core";
+import { Button } from "../../components/ui/button";
+import axios from "axios";
 
 export default function Home(){
     const canRef = useRef<HTMLCanvasElement>(null);
     const [isdrawing, setIsDrawing] = useState(false);
+    const [color, setColor] = useState("rgb(255,255,255)"); 
+
 
     useEffect(() => {
         const canvas = canRef.current;
@@ -40,9 +46,9 @@ export default function Home(){
         }
         const canvas = canRef.current;
         if(canvas){
-            const ctx = canvas.getContext("2d");
+            const ctx = canvas.getContext("2d");    
             if(ctx){
-                ctx.strokeStyle = "white";
+                ctx.strokeStyle = color;
                 ctx.lineTo(e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop);
                 ctx.stroke();
 
@@ -57,7 +63,8 @@ export default function Home(){
         className="absolute top-0 left-0 w-full h-full"
         onMouseDown={startDrawing}
         onMouseOut={stopDrawing}
-        onMouseUp={stopDrawing}       
+        onMouseUp={stopDrawing}  
+        onMouseMove={draw}     
         />
     )
 }

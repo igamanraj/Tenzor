@@ -10,9 +10,6 @@ const SWATCHES = [
     "#ff922b", //orange
     "#ffd43b", //yellow
     "#f783ac", //light pink
-    "#ff6b6b", //light red
-    "#fa5252", //dark red
-    "#e64980", //dark pink
 ]
 
 export {SWATCHES};

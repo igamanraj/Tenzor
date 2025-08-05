@@ -36,6 +36,7 @@ function CustomDraggable({ children, position, onDrag }: DraggableProps) {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
     handleStart(e.clientX, e.clientY);
   };
 
@@ -48,10 +49,20 @@ function CustomDraggable({ children, position, onDrag }: DraggableProps) {
   const handleMove = (clientX: number, clientY: number) => {
     if (!isDragging) return;
 
-    const newPosition = {
-      x: clientX - dragStart.x,
-      y: clientY - dragStart.y,
-    };
+    // Get viewport dimensions
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Calculate new position with boundary constraints
+    let newX = clientX - dragStart.x;
+    let newY = clientY - dragStart.y;
+    
+    // Constrain to viewport boundaries (with some padding)
+    const padding = 20;
+    newX = Math.max(padding, Math.min(viewportWidth - 300 - padding, newX));
+    newY = Math.max(padding + 100, Math.min(viewportHeight - 200 - padding, newY)); // Extra top padding for header
+
+    const newPosition = { x: newX, y: newY };
     setCurrentPosition(newPosition);
     onDrag(newPosition);
   };
@@ -96,6 +107,11 @@ function CustomDraggable({ children, position, onDrag }: DraggableProps) {
     }
   }, [isDragging, dragStart, onDrag]);
 
+  // Update position when prop changes
+  useEffect(() => {
+    setCurrentPosition(position);
+  }, [position]);
+
   return (
     <div
       style={{
@@ -105,6 +121,7 @@ function CustomDraggable({ children, position, onDrag }: DraggableProps) {
         cursor: isDragging ? "grabbing" : "grab",
         userSelect: "none",
         touchAction: "none",
+        zIndex: isDragging ? 50 : 40,
       }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -165,12 +182,28 @@ export default function Home() {
     if (canvas) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight - canvas.offsetTop;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.lineWidth = 4;
-        ctx.globalCompositeOperation = "source-over";
+        const updateCanvasSize = () => {
+          const rect = canvas.getBoundingClientRect();
+          const dpr = window.devicePixelRatio || 1;
+          
+          // Set actual size in memory (scaled for device pixel ratio)
+          canvas.width = rect.width * dpr;
+          canvas.height = rect.height * dpr;
+          
+          // Scale back down using CSS
+          canvas.style.width = rect.width + 'px';
+          canvas.style.height = rect.height + 'px';
+          
+          // Scale the drawing context so everything draws at the correct size
+          ctx.scale(dpr, dpr);
+          
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.lineWidth = 4;
+          ctx.globalCompositeOperation = "source-over";
+        };
+        
+        updateCanvasSize();
       }
     }
 
@@ -189,15 +222,15 @@ export default function Home() {
           ],
         },
         "HTML-CSS": {
-          scale: 90,
+          scale: window.innerWidth < 640 ? 80 : 90,
           linebreaks: { automatic: true }
         },
         CommonHTML: {
-          scale: 90,
+          scale: window.innerWidth < 640 ? 80 : 90,
           linebreaks: { automatic: true }
         },
         SVG: {
-          scale: 90,
+          scale: window.innerWidth < 640 ? 80 : 90,
           linebreaks: { automatic: true }
         }
       });
@@ -206,10 +239,18 @@ export default function Home() {
     // Handle window resize
     const handleResize = () => {
       if (canvas) {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight - canvas.offsetTop;
         const ctx = canvas.getContext("2d");
         if (ctx) {
+          const rect = canvas.getBoundingClientRect();
+          const dpr = window.devicePixelRatio || 1;
+          
+          canvas.width = rect.width * dpr;
+          canvas.height = rect.height * dpr;
+          
+          canvas.style.width = rect.width + 'px';
+          canvas.style.height = rect.height + 'px';
+          
+          ctx.scale(dpr, dpr);
           ctx.lineCap = "round";
           ctx.lineJoin = "round";
           ctx.lineWidth = 4;
@@ -267,8 +308,9 @@ export default function Home() {
           y = touch.clientY - rect.top;
         } else {
           // Mouse event
-          x = e.nativeEvent.offsetX;
-          y = e.nativeEvent.offsetY;
+          const rect = canvas.getBoundingClientRect();
+          x = e.nativeEvent.clientX - rect.left;
+          y = e.nativeEvent.clientY - rect.top;
         }
         ctx.moveTo(x, y);
         setIsDrawing(true);
@@ -296,8 +338,9 @@ export default function Home() {
           y = touch.clientY - rect.top;
         } else {
           // Mouse event
-          x = e.nativeEvent.offsetX;
-          y = e.nativeEvent.offsetY;
+          const rect = canvas.getBoundingClientRect();
+          x = e.nativeEvent.clientX - rect.left;
+          y = e.nativeEvent.clientY - rect.top;
         }
         ctx.lineTo(x, y);
         ctx.stroke();
@@ -319,7 +362,7 @@ export default function Home() {
       try {
         const response = await axios({
           method: "post",
-          url: `${import.meta.env.VITE_API_URL}/calculate/analyze`,
+          url: `${import.meta.env.VITE_BACKEND_URL}/calculate/analyze`,
           data: {
             image: canvas.toDataURL("image/png"),
             dict_of_vars: dictOfVars,
@@ -380,21 +423,52 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-slate-700 via-gray-800 to-slate-700 relative overflow-hidden font-sans">
       {/* Header with controls */}
-      <header className="absolute top-0 left-0 right-0 z-30 p-4 md:p-6">
+      <header className="absolute top-0 left-0 right-0 z-30 p-3 sm:p-4 md:p-6">
         <div className="max-w-7xl mx-auto">
           {/* Mobile layout */}
-          <div className="md:hidden space-y-4">
-            {/* Top row: Reset and Run buttons */}
-            <div className="flex justify-between gap-3">
+          <div className="md:hidden space-y-3">
+            {/* Brand section for mobile */}
+            <div className="flex items-center justify-center mb-2">
+              <div className="flex items-center space-x-3">
+                <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg p-2">
+                  <svg
+                    width="24px"
+                    height="24px"
+                    viewBox="0 0 50.8 50.8"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <g
+                      fill="none"
+                      stroke="white"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="5"
+                    >
+                      <path d="M44.979 25.929V5.821H5.821v39.158h20.108" />
+                      <circle cx="38.232" cy="38.232" r="6.747" />
+                      <path d="M33.073 33.073 21.431 21.431" />
+                      <circle cx="20.637" cy="20.637" r="1.587" />
+                    </g>
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-white text-lg sm:text-xl font-bold">Tenzor</h1>
+                  <p className="text-white/70 text-xs sm:text-sm">AI-Powered Calculator</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons row */}
+            <div className="flex justify-between gap-2 sm:gap-3">
               <Button
                 onClick={() => setReset(true)}
-                className="flex-1 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-2xl py-3 px-6 font-semibold transition-all duration-300 transform hover:scale-105 hover:shadow-2xl shadow-lg backdrop-blur-sm border border-white/10"
+                className="flex-1 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-xl sm:rounded-2xl py-2.5 sm:py-3 px-4 sm:px-6 text-sm sm:text-base font-semibold transition-all duration-300 transform hover:scale-105 hover:shadow-2xl shadow-lg backdrop-blur-sm border border-white/10"
                 variant="default"
               >
                 <svg
-                  className="w-4 h-4 mr-2"
+                  className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -411,13 +485,13 @@ export default function Home() {
               <Button
                 onClick={runRoute}
                 disabled={isLoading}
-                className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-emerald-300 disabled:to-teal-400 text-white rounded-2xl py-3 px-6 font-semibold transition-all duration-300 transform hover:scale-105 hover:shadow-2xl shadow-lg backdrop-blur-sm border border-white/10 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-emerald-300 disabled:to-teal-400 text-white rounded-xl sm:rounded-2xl py-2.5 sm:py-3 px-4 sm:px-6 text-sm sm:text-base font-semibold transition-all duration-300 transform hover:scale-105 hover:shadow-2xl shadow-lg backdrop-blur-sm border border-white/10 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
                 variant="default"
               >
                 {isLoading ? (
                   <>
                     <svg
-                      className="w-4 h-4 mr-2 animate-spin"
+                      className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 animate-spin"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -436,12 +510,13 @@ export default function Home() {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       />
                     </svg>
-                    Processing...
+                    <span className="hidden xs:inline">Processing...</span>
+                    <span className="xs:hidden">...</span>
                   </>
                 ) : (
                   <>
                     <svg
-                      className="w-4 h-4 mr-2"
+                      className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -460,15 +535,15 @@ export default function Home() {
             </div>
 
             {/* Color palette */}
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20">
-              <h3 className="text-white text-sm font-medium mb-3 text-center">
+            <div className="bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-white/20">
+              <h3 className="text-white text-xs sm:text-sm font-medium mb-2 sm:mb-3 text-center">
                 Colors
               </h3>
-              <div className="flex flex-wrap justify-center gap-2">
+              <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2">
                 {SWATCHES.map((swatch) => (
                   <div
                     key={swatch}
-                    className={`w-8 h-8 rounded-full cursor-pointer transition-all duration-200 transform hover:scale-110 shadow-lg border-2 ${
+                    className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full cursor-pointer transition-all duration-200 transform hover:scale-110 shadow-lg border-2 ${
                       color === swatch
                         ? "border-white scale-110"
                         : "border-white/30"
@@ -484,46 +559,44 @@ export default function Home() {
           {/* Desktop layout */}
           <div className="hidden md:flex items-center justify-between">
             {/* Left: Brand */}
-            <div className="flex items-center space-x-4">
-              <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-3">
+            <div className="flex items-center space-x-3 lg:space-x-4">
+              <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl p-2.5 lg:p-3">
                 <svg
-                  width="30px"
-                  height="30px"
+                  width="28px"
+                  height="28px"
+                  className="lg:w-[30px] lg:h-[30px]"
                   viewBox="0 0 50.8 50.8"
                   xmlns="http://www.w3.org/2000/svg"
                 >
                   <g
                     fill="none"
                     stroke="white"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="5"
                   >
                     <path d="M44.979 25.929V5.821H5.821v39.158h20.108" />
-
                     <circle cx="38.232" cy="38.232" r="6.747" />
-
                     <path d="M33.073 33.073 21.431 21.431" />
-
                     <circle cx="20.637" cy="20.637" r="1.587" />
                   </g>
                 </svg>
               </div>
               <div>
-                <h1 className="text-white text-xl font-bold">Tenzor</h1>
-                <p className="text-white/70 text-sm">AI-Powered Calculator</p>
+                <h1 className="text-white text-lg lg:text-xl font-bold">Tenzor</h1>
+                <p className="text-white/70 text-xs lg:text-sm">AI-Powered Calculator</p>
               </div>
             </div>
 
             {/* Center: Color palette */}
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl px-6 py-3 border border-white/20">
-              <div className="flex items-center space-x-3">
-                <span className="text-white text-sm font-medium">Colors:</span>
-                <div className="flex space-x-2">
+            <div className="bg-white/10 backdrop-blur-md rounded-xl lg:rounded-2xl px-4 lg:px-6 py-2.5 lg:py-3 border border-white/20">
+              <div className="flex items-center space-x-2 lg:space-x-3">
+                <span className="text-white text-xs lg:text-sm font-medium">Colors:</span>
+                <div className="flex space-x-1.5 lg:space-x-2">
                   {SWATCHES.map((swatch) => (
                     <div
                       key={swatch}
-                      className={`w-8 h-8 rounded-full cursor-pointer transition-all duration-200 transform hover:scale-110 shadow-lg border-2 ${
+                      className={`w-6 h-6 lg:w-8 lg:h-8 rounded-full cursor-pointer transition-all duration-200 transform hover:scale-110 shadow-lg border-2 ${
                         color === swatch
                           ? "border-white scale-110"
                           : "border-white/30"
@@ -537,14 +610,14 @@ export default function Home() {
             </div>
 
             {/* Right: Action buttons */}
-            <div className="flex space-x-3">
+            <div className="flex space-x-2 lg:space-x-3">
               <Button
                 onClick={() => setReset(true)}
-                className="bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-2xl py-3 px-6 font-semibold transition-all duration-300 transform hover:scale-105 hover:shadow-2xl shadow-lg backdrop-blur-sm border border-white/10"
+                className="bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-xl lg:rounded-2xl py-2.5 lg:py-3 px-4 lg:px-6 text-sm lg:text-base font-semibold transition-all duration-300 transform hover:scale-105 hover:shadow-2xl shadow-lg backdrop-blur-sm border border-white/10"
                 variant="default"
               >
                 <svg
-                  className="w-4 h-4 mr-2"
+                  className="w-3.5 h-3.5 lg:w-4 lg:h-4 mr-1.5 lg:mr-2"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -561,13 +634,13 @@ export default function Home() {
               <Button
                 onClick={runRoute}
                 disabled={isLoading}
-                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-emerald-300 disabled:to-teal-400 text-white rounded-2xl py-3 px-6 font-semibold transition-all duration-300 transform hover:scale-105 hover:shadow-2xl shadow-lg backdrop-blur-sm border border-white/10 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
+                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-emerald-300 disabled:to-teal-400 text-white rounded-xl lg:rounded-2xl py-2.5 lg:py-3 px-4 lg:px-6 text-sm lg:text-base font-semibold transition-all duration-300 transform hover:scale-105 hover:shadow-2xl shadow-lg backdrop-blur-sm border border-white/10 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg"
                 variant="default"
               >
                 {isLoading ? (
                   <>
                     <svg
-                      className="w-5 h-5 mr-2 animate-spin"
+                      className="w-4 h-4 lg:w-5 lg:h-5 mr-1.5 lg:mr-2 animate-spin"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -591,7 +664,7 @@ export default function Home() {
                 ) : (
                   <>
                     <svg
-                      className="w-5 h-5 mr-2"
+                      className="w-4 h-4 lg:w-5 lg:h-5 mr-1.5 lg:mr-2"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -613,7 +686,7 @@ export default function Home() {
       </header>
 
       {/* Canvas area */}
-      <div className="absolute inset-0 pt-32 md:pt-24">
+      <div className="absolute inset-0 pt-40 sm:pt-36 md:pt-24 lg:pt-28">
         <canvas
           ref={canvasRef}
           id="canvas"
@@ -643,21 +716,21 @@ export default function Home() {
           position={latexPosition}
           onDrag={(newPosition) => setLatexPosition(newPosition)}
         >
-          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-2xl border border-white/30 min-w-[300px] max-w-[400px]">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-gray-700 text-sm font-medium">
+          <div className="bg-white/95 backdrop-blur-md rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-2xl border border-white/30 min-w-[250px] sm:min-w-[300px] max-w-[350px] sm:max-w-[400px]">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <span className="text-black animate-pulse text-xs sm:text-sm font-medium bg-gradient-to-r from-black via-white to-black bg-[length:200%_100%]  bg-clip-text">
                 Calculating...
-              </span>
+                </span>
               <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-500 rounded-full"></div>
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-yellow-500 rounded-full"></div>
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
               </div>
             </div>
             <div className="text-center">
-              <span className="inline-flex animate-text-gradient bg-gradient-to-r from-[#ACACAC] via-[#363636] to-[#ACACAC] bg-[200%_auto] text-2xl text-center text-transparent font-medium bg-clip-text">
-                Processing...
-              </span>
+                <span className="inline-flex animate-pulse bg-gradient-to-r from-black via-white to-black bg-[length:200%_100%] text-lg sm:text-2xl text-transparent font-medium bg-clip-text ">
+                  Generating...
+                </span>
             </div>
           </div>
         </CustomDraggable>
@@ -671,19 +744,19 @@ export default function Home() {
             position={latexPosition}
             onDrag={(newPosition) => setLatexPosition(newPosition)}
           >
-            <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-2xl border border-white/30 min-w-[300px] max-w-[500px]">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-gray-700 text-sm font-medium">
+            <div className="bg-white/95 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-2xl border border-white/30 min-w-[250px] sm:min-w-[300px] max-w-[400px] sm:max-w-[500px]">
+              <div className="flex items-center justify-between mb-2 sm:mb-3">
+                <span className="text-gray-700 text-xs sm:text-sm font-medium">
                   Result
                 </span>
                 <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-500 rounded-full"></div>
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-yellow-500 rounded-full"></div>
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
                 </div>
               </div>
-              <div className="latex-content text-gray-800 text-base bg-gray-50 rounded-lg p-4 break-words overflow-hidden">
-                <div className="math-expression" style={{ fontSize: '16px', lineHeight: '1.5' }}>
+              <div className="latex-content text-gray-800 text-sm sm:text-base bg-gray-50 rounded-lg p-3 sm:p-4 break-words overflow-hidden">
+                <div className="math-expression" style={{ fontSize: window.innerWidth < 640 ? '14px' : '16px', lineHeight: '1.5' }}>
                   {latex}
                 </div>
               </div>

@@ -12,4 +12,7 @@ const SWATCHES = [
     "#f783ac", //light pink
 ]
 
-export {SWATCHES};
+// API Configuration
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+export {SWATCHES, API_BASE_URL};

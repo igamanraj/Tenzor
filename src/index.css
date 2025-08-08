@@ -42,6 +42,17 @@ html, body {
 canvas {
   display: block;
   touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Prevent touch actions on drawing area */
+.drawing-area {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Custom scrollbar for webkit browsers */

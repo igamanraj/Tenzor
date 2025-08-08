@@ -26,6 +26,7 @@ function CustomDraggable({ children, position, onDrag }: DraggableProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [currentPosition, setCurrentPosition] = useState(position);
+  const [lastTap, setLastTap] = useState(0);
 
   const handleStart = (clientX: number, clientY: number) => {
     setIsDragging(true);
@@ -36,12 +37,28 @@ function CustomDraggable({ children, position, onDrag }: DraggableProps) {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
     handleStart(e.clientX, e.clientY);
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    e.preventDefault();
+    const currentTime = new Date().getTime();
+    const tapLength = currentTime - lastTap;
+    
+    // Double tap detection for mobile
+    if (tapLength < 500 && tapLength > 0) {
+      // Double tap detected - reset to mobile-friendly position
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const newPosition = { 
+        x: viewportWidth * 0.05, 
+        y: viewportHeight * 0.3 
+      };
+      setCurrentPosition(newPosition);
+      onDrag(newPosition);
+      return;
+    }
+    
+    setLastTap(currentTime);
     const touch = e.touches[0];
     handleStart(touch.clientX, touch.clientY);
   };
@@ -52,15 +69,20 @@ function CustomDraggable({ children, position, onDrag }: DraggableProps) {
     // Get viewport dimensions
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
+    const isMobile = viewportWidth < 768;
     
     // Calculate new position with boundary constraints
     let newX = clientX - dragStart.x;
     let newY = clientY - dragStart.y;
     
-    // Constrain to viewport boundaries (with some padding)
-    const padding = 20;
-    newX = Math.max(padding, Math.min(viewportWidth - 300 - padding, newX));
-    newY = Math.max(padding + 100, Math.min(viewportHeight - 200 - padding, newY)); // Extra top padding for header
+    // Constrain to viewport boundaries (with responsive padding)
+    const padding = isMobile ? 10 : 20;
+    const resultBoxWidth = isMobile ? 280 : 320; // Approximate width of result box
+    const resultBoxHeight = isMobile ? 200 : 220; // Approximate height of result box
+    const headerHeight = isMobile ? 180 : 90; // Header height varies by screen size - reduced for desktop
+    
+    newX = Math.max(padding, Math.min(viewportWidth - resultBoxWidth - padding, newX));
+    newY = Math.max(headerHeight, Math.min(viewportHeight - resultBoxHeight - padding, newY));
 
     const newPosition = { x: newX, y: newY };
     setCurrentPosition(newPosition);
@@ -82,7 +104,9 @@ function CustomDraggable({ children, position, onDrag }: DraggableProps) {
       };
 
       const handleGlobalTouchMove = (e: TouchEvent) => {
-        e.preventDefault();
+        if (e.cancelable) {
+          e.preventDefault();
+        }
         const touch = e.touches[0];
         handleMove(touch.clientX, touch.clientY);
       };
@@ -107,9 +131,22 @@ function CustomDraggable({ children, position, onDrag }: DraggableProps) {
     }
   }, [isDragging, dragStart, onDrag]);
 
-  // Update position when prop changes
+  // Update position when prop changes (with boundary constraints)
   useEffect(() => {
-    setCurrentPosition(position);
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const isMobile = viewportWidth < 768;
+    
+    const padding = isMobile ? 10 : 20;
+    const resultBoxWidth = isMobile ? 280 : 320;
+    const resultBoxHeight = isMobile ? 200 : 220;
+    const headerHeight = isMobile ? 180 : 90; // Reduced for desktop
+    
+    // Ensure the position is within viewport bounds
+    const constrainedX = Math.max(padding, Math.min(viewportWidth - resultBoxWidth - padding, position.x));
+    const constrainedY = Math.max(headerHeight, Math.min(viewportHeight - resultBoxHeight - padding, position.y));
+    
+    setCurrentPosition({ x: constrainedX, y: constrainedY });
   }, [position]);
 
   return (
@@ -172,6 +209,7 @@ export default function Home() {
       setResult(undefined);
       setDictOfVars({});
       setIsLoading(false);
+      resetResultPosition();
       setReset(false);
     }
   }, [reset]);
@@ -266,6 +304,32 @@ export default function Home() {
     };
   }, []);
 
+  // Handle canvas touch events properly
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const handleTouchStart = (e: TouchEvent) => {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      };
+
+      const handleTouchMove = (e: TouchEvent) => {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      };
+
+      canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+      canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+
+      return () => {
+        canvas.removeEventListener("touchstart", handleTouchStart);
+        canvas.removeEventListener("touchmove", handleTouchMove);
+      };
+    }
+  }, []);
+
   const renderLatexToCanvas = (expression: string, answer: string) => {
     const latex = `\\(\\LARGE{${expression} = ${answer}}\\)`;
     setLatexExpression([...latexExpression, latex]);
@@ -287,6 +351,22 @@ export default function Home() {
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
+    }
+  };
+
+  // Reset result position to mobile-friendly location
+  const resetResultPosition = () => {
+    const isMobile = window.innerWidth < 768;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    if (isMobile) {
+      setLatexPosition({ 
+        x: viewportWidth * 0.05, 
+        y: viewportHeight * 0.3 
+      });
+    } else {
+      setLatexPosition({ x: 50, y: 150 }); // Reduced from 200 to 150
     }
   };
 
@@ -403,7 +483,24 @@ export default function Home() {
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
 
-        setLatexPosition({ x: centerX, y: centerY });
+        // Calculate appropriate position for mobile and desktop
+        const isMobile = window.innerWidth < 768; // md breakpoint
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        let resultX, resultY;
+        
+        if (isMobile) {
+          // On mobile, position result in a safe, visible area
+          resultX = Math.max(10, Math.min(viewportWidth - 280, viewportWidth * 0.05)); // 5% from left edge
+          resultY = Math.max(180, Math.min(viewportHeight - 250, viewportHeight * 0.3)); // 30% from top
+        } else {
+          // On desktop, use canvas-based positioning with constraints
+          resultX = Math.max(20, Math.min(viewportWidth - 320, centerX));
+          resultY = Math.max(90, Math.min(viewportHeight - 220, centerY)); // Reduced from 120 to 90
+        }
+
+        setLatexPosition({ x: resultX, y: resultY });
         
         // Add delay before showing results for better UX
         setTimeout(() => {
@@ -686,25 +783,22 @@ export default function Home() {
       </header>
 
       {/* Canvas area */}
-      <div className="absolute inset-0 pt-40 sm:pt-36 md:pt-24 lg:pt-28">
+      <div className="absolute inset-0 pt-40 sm:pt-36 md:pt-20 lg:pt-20 drawing-area">
         <canvas
           ref={canvasRef}
           id="canvas"
-          className="w-full h-full cursor-crosshair touch-none"
+          className="w-full h-full cursor-crosshair touch-none drawing-area"
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
           onMouseOut={stopDrawing}
           onTouchStart={(e) => {
-            e.preventDefault();
             startDrawing(e);
           }}
           onTouchMove={(e) => {
-            e.preventDefault();
             draw(e);
           }}
-          onTouchEnd={(e) => {
-            e.preventDefault();
+          onTouchEnd={() => {
             stopDrawing();
           }}
         />
@@ -716,7 +810,7 @@ export default function Home() {
           position={latexPosition}
           onDrag={(newPosition) => setLatexPosition(newPosition)}
         >
-          <div className="bg-white/95 backdrop-blur-md rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-2xl border border-white/30 min-w-[250px] sm:min-w-[300px] max-w-[350px] sm:max-w-[400px]">
+          <div className="bg-white/95 backdrop-blur-md rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-2xl border border-white/30 w-[280px] sm:w-[320px] md:w-[400px] max-w-[calc(100vw-20px)]">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
                 <span className="text-black animate-pulse text-xs sm:text-sm font-medium bg-gradient-to-r from-black via-white to-black bg-[length:200%_100%]  bg-clip-text">
                 Calculating...
@@ -744,7 +838,7 @@ export default function Home() {
             position={latexPosition}
             onDrag={(newPosition) => setLatexPosition(newPosition)}
           >
-            <div className="bg-white/95 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-2xl border border-white/30 min-w-[250px] sm:min-w-[300px] max-w-[400px] sm:max-w-[500px]">
+            <div className="bg-white/95 backdrop-blur-md rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-2xl border border-white/30 w-[280px] sm:w-[320px] md:w-[400px] max-w-[calc(100vw-20px)]">
               <div className="flex items-center justify-between mb-2 sm:mb-3">
                 <span className="text-gray-700 text-xs sm:text-sm font-medium">
                   Result

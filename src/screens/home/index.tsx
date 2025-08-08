@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { SWATCHES } from "@/constant";
+import { SWATCHES, API_BASE_URL } from "@/constant";
 // import {LazyBrush} from 'lazy-brush';
 
 interface GeneratedResult {
@@ -362,7 +362,7 @@ export default function Home() {
       try {
         const response = await axios({
           method: "post",
-          url: `${import.meta.env.VITE_BACKEND_URL}/calculate/analyze`,
+          url: `${API_BASE_URL}/calculate/analyze`,
           data: {
             image: canvas.toDataURL("image/png"),
             dict_of_vars: dictOfVars,
